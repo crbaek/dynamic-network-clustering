@@ -2,6 +2,7 @@ Official implementation of the paper "Dynamic spectral co-clustering of directed
 This repository provides a statistical framework to detect and track group structures within complex, directed networks over time.
 
 Key Features:
+
 Model Frameworks: Implements Periodic VAR (PVAR) models to capture seasonal network changes, and generalized Vector Heterogeneous Autoregressive (VHAR) models to analyze short-, medium-, and long-term network dependencies.
 
 Network Estimation: Utilizes Lasso estimation to efficiently handle high-dimensional data and reliably estimate the initial network connections.
