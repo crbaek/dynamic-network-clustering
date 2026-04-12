@@ -9,3 +9,7 @@ Network Estimation: Utilizes Lasso estimation to efficiently handle high-dimensi
 
 Community Tracking: Recovers hidden groups using spectral co-clustering and tracks their evolution, allowing users to observe exactly when communities split, merge, or remain stable.
 Applications include analyzing time-series data, such as U.S. macroeconomic trends and global stock index movements.
+
+Authors@R: c(person(given = "Changryong", family = "Baek", email = "crbaek@skku.edu", role = c("aut", "cre", "cph")),
+    person(given = "Younghoon", family = "Kim", role = "aut"))
+           
