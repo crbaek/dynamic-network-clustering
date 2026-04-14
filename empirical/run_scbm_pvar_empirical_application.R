@@ -85,9 +85,9 @@ lasso_fold <- 10L
 lasso_max_iter <- 1000L
 lasso_tol <- 1e-6
 
-diagTF <- TRUE
-centerTF <- FALSE
-updateSigma <- TRUE
+diagTF <- TRUE # always include the diagonal
+centerTF <- TRUE # centing the data
+updateSigma <- TRUE # adjust variace in lasso
 sigma_diag_only <- TRUE
 
 # community counts: (Ky1, Kz1, Ky2, Kz2, Ky3, Kz3, Ky4, Kz4)
@@ -106,7 +106,7 @@ seed <- 12345L
 
 # plot / workspace options
 SAVE_WORKSPACE <- TRUE
-SAVE_PLOTS <- FALSE
+SAVE_PLOTS <- TRUE
 MAKE_SANKEY <- TRUE
 FIGURE_DIR <- file.path(OUTPUT_DIR, OUTPUT_STUB, "figures")
 # SAVE_PLOTS <- TRUE
@@ -210,10 +210,10 @@ if (isTRUE(MAKE_SANKEY)) {
     stages <- c("S1.sending", "S2.sending", "S3.sending", "S4.sending")
     flow_wide <- data.frame(series = rownames(mat), mat, check.names = FALSE)
 
-    s1_box_cols <- c("1" = "#E3EDF6", "2" = "#FDE8E8")
+    s1_box_cols <- c("2" = "#E3EDF6", "1" = "#FDE8E8")
     s2_box_cols <- c("2" = "#C6DBEF", "1" = "#FBCFCE")
     s3_box_cols <- c("1" = "#9ECAE1", "2" = "#F8AFA8", "3" = "#CCEBC5")
-    s4_box_cols <- c("1" = "#F08080", "2" = "#D9CE9B", "3" = "#6BAED6") 
+    s4_box_cols <- c("3" = "#CE93D8", "2" = "#D9CE9B", "1" = "#74C476") 
     
 
     flow_cols <- c(
@@ -312,7 +312,7 @@ if (isTRUE(MAKE_SANKEY)) {
       make_labels(x_pos = 2, col_idx = 2, y_ranges = lay_s2$y_ranges, mat = mat) +
       make_labels(x_pos = 3, col_idx = 3, y_ranges = lay_s3$y_ranges, mat = mat) +
       make_labels(x_pos = 4, col_idx = 4, y_ranges = lay_s4$y_ranges, mat = mat)
-
+    print(pvar_sankey_plot)
     run_plot_block(
       save_plot = SAVE_PLOTS,
       file = file.path(FIGURE_DIR, "pvar_sankey.pdf"),

@@ -849,11 +849,46 @@ scbm_vhar_lambda_text_from_pkg <- function(lambda_pkg, N_eff) {
   2 * as.numeric(lambda_pkg) / as.numeric(N_eff)
 }
 
-scbm_vhar_fit_ols <- function(Yt, bw = 5L, bm = 22L) {
+scbm_vhar_center_series <- function(Yt, centerTF = TRUE) {
   Yt <- scbm_safe_matrix(Yt)
-  fit <- sparseVAR::VHAR_ols(Yt = Yt, bd = as.integer(bw), bm = as.integer(bm))
-  Bhat <- scbm_safe_matrix(fit$Phi_hat)
-  q <- nrow(Yt)
+  if (!isTRUE(centerTF)) return(list(Yc = Yt, mu = NULL))
+  mu <- rowMeans(Yt, na.rm = TRUE)
+  Yc <- Yt - mu
+  list(Yc = Yc, mu = mu)
+}
+
+scbm_vhar_fit_ols <- function(Yt, bw = 5L, bm = 22L, centerTF = TRUE, ridge = 1e-8) {
+  Yt <- scbm_safe_matrix(Yt)
+  cen <- scbm_vhar_center_series(Yt, centerTF = centerTF)
+  Yc <- cen$Yc
+  q <- nrow(Yc)
+  TT <- ncol(Yc)
+  bw <- as.integer(bw)
+  bm <- as.integer(bm)
+
+  if (bw <= 1L || bm <= bw) stop("Need 1 < bw < bm.", call. = FALSE)
+  if (TT <= bm) stop("Need ncol(Yt) > bm.", call. = FALSE)
+
+  idx <- seq.int(from = bm + 1L, to = TT)
+  N_eff <- length(idx)
+
+  Yresp <- t(Yc[, idx, drop = FALSE])
+  Xs <- t(Yc[, idx - 1L, drop = FALSE])
+  Xm <- matrix(NA_real_, nrow = N_eff, ncol = q)
+  Xl <- matrix(NA_real_, nrow = N_eff, ncol = q)
+
+  for (ii in seq_along(idx)) {
+    tt <- idx[ii]
+    Xm[ii, ] <- rowMeans(Yc[, (tt - bw):(tt - 1L), drop = FALSE])
+    Xl[ii, ] <- rowMeans(Yc[, (tt - bm):(tt - 1L), drop = FALSE])
+  }
+
+  X <- cbind(Xs, Xm, Xl)
+  XtX <- crossprod(X) + as.numeric(ridge) * diag(ncol(X))
+  XtY <- crossprod(X, Yresp)
+  Bhat <- t(solve(XtX, XtY))
+  Bhat <- scbm_safe_matrix(Bhat)
+
   list(
     Phi_hat = Bhat,
     Bhat = Bhat,
@@ -861,13 +896,16 @@ scbm_vhar_fit_ols <- function(Yt, bw = 5L, bm = 22L) {
     lambda_pkg = rep(NA_real_, 3L),
     lambda_text = rep(NA_real_, 3L),
     c_lambda_sel = NA_real_,
-    lambda_mode = "ols"
+    lambda_mode = "ols",
+    centerTF = isTRUE(centerTF),
+    mean = cen$mu
   )
 }
 
 scbm_vhar_select_c_lambda_blockcv <- function(Yt,
                                               bw = 5L,
                                               bm = 22L,
+                                              centerTF = FALSE,
                                               c_grid = scbm_default_c_grid(),
                                               fold = 10L,
                                               max_iter = 1000L,
@@ -876,8 +914,10 @@ scbm_vhar_select_c_lambda_blockcv <- function(Yt,
                                               updateSigma = FALSE,
                                               sigma_diag_only = TRUE) {
   Yt <- scbm_safe_matrix(Yt)
-  q <- nrow(Yt)
-  N_eff <- ncol(Yt) - as.integer(bm)
+  cen <- scbm_vhar_center_series(Yt, centerTF = centerTF)
+  Yc <- cen$Yc
+  q <- nrow(Yc)
+  N_eff <- ncol(Yc) - as.integer(bm)
   if (N_eff <= 0L) stop("Need ncol(Yt) > bm for c-lambda CV.", call. = FALSE)
 
   c_grid <- unique(as.numeric(c_grid))
@@ -890,7 +930,7 @@ scbm_vhar_select_c_lambda_blockcv <- function(Yt,
   lambda_seq <- sort(unique(as.numeric(c_grid) * as.numeric(lambda_pkg_base)), decreasing = TRUE)
 
   fit <- sparseVAR::VHAR_adalasso_fista(
-    Yt = Yt,
+    Yt = Yc,
     type = "lasso",
     fold = as.integer(fold),
     lambda_seq = as.numeric(lambda_seq),
@@ -930,6 +970,7 @@ scbm_vhar_select_c_lambda_blockcv <- function(Yt,
 scbm_vhar_fit_lasso <- function(Yt,
                                 bw = 5L,
                                 bm = 22L,
+                                centerTF = TRUE,
                                 lambda_mode = c("theory", "cv", "cv_c"),
                                 c_lambda = 0.25,
                                 c_grid = scbm_default_c_grid(),
@@ -942,15 +983,17 @@ scbm_vhar_fit_lasso <- function(Yt,
                                 sigma_diag_only = TRUE) {
   lambda_mode <- match.arg(lambda_mode)
   Yt <- scbm_safe_matrix(Yt)
-  q <- nrow(Yt)
-  N_eff <- ncol(Yt) - as.integer(bm)
+  cen <- scbm_vhar_center_series(Yt, centerTF = centerTF)
+  Yc <- cen$Yc
+  q <- nrow(Yc)
+  N_eff <- ncol(Yc) - as.integer(bm)
   if (N_eff <= 0L) stop("Need ncol(Yt) > bm.", call. = FALSE)
 
   if (lambda_mode == "theory") {
     lambda_text <- scbm_vhar_lambda_textbook(q = q, N_eff = N_eff, theory_const = c_lambda)
     lambda_pkg <- scbm_vhar_lambda_pkg_from_text(lambda_text, N_eff = N_eff)
     fit <- sparseVAR::VHAR_adalasso_fista(
-      Yt = Yt,
+      Yt = Yc,
       type = "lasso",
       lambda = as.numeric(lambda_pkg),
       diagTF = isTRUE(diagTF),
@@ -964,7 +1007,7 @@ scbm_vhar_fit_lasso <- function(Yt,
     c_sel <- as.numeric(c_lambda)[1L]
   } else if (lambda_mode == "cv") {
     fit <- sparseVAR::VHAR_adalasso_fista(
-      Yt = Yt,
+      Yt = Yc,
       type = "lasso",
       fold = as.integer(fold),
       nlambda = as.integer(nlambda),
@@ -984,9 +1027,10 @@ scbm_vhar_fit_lasso <- function(Yt,
     c_sel <- scbm_mean(lambda_text / lambda_text_base)
   } else {
     sel <- scbm_vhar_select_c_lambda_blockcv(
-      Yt = Yt,
+      Yt = Yc,
       bw = bw,
       bm = bm,
+      centerTF = FALSE,
       c_grid = c_grid,
       fold = fold,
       max_iter = max_iter,
@@ -996,7 +1040,7 @@ scbm_vhar_fit_lasso <- function(Yt,
       sigma_diag_only = sigma_diag_only
     )
     fit <- sparseVAR::VHAR_adalasso_fista(
-      Yt = Yt,
+      Yt = Yc,
       type = "lasso",
       lambda = as.numeric(sel$lambda_pkg_sel),
       diagTF = isTRUE(diagTF),
@@ -1023,7 +1067,9 @@ scbm_vhar_fit_lasso <- function(Yt,
     lambda_pkg = rep(as.numeric(lambda_pkg), 3L),
     lambda_text = rep(as.numeric(lambda_text), 3L),
     c_lambda_sel = as.numeric(c_sel),
-    lambda_mode = lambda_mode
+    lambda_mode = lambda_mode,
+    centerTF = isTRUE(centerTF),
+    mean = cen$mu
   )
 }
 
@@ -1325,6 +1371,7 @@ scbm_vhar_empirical_fit <- function(data,
                                 bm = 22L,
                                 horizon_names = c("daily", "weekly", "monthly"),
                                 estimator = c("ols", "lasso"),
+                                centerTF = TRUE,
                                 series_in_rows = FALSE,
                                 series_names = NULL,
                                 lambda_mode = c("cv_c", "cv", "theory"),
@@ -1353,12 +1400,13 @@ scbm_vhar_empirical_fit <- function(data,
   if (is.null(series_names)) series_names <- paste0("V", seq_len(q))
 
   fit_first <- if (estimator == "ols") {
-    scbm_vhar_fit_ols(Yt, bw = bw, bm = bm)
+    scbm_vhar_fit_ols(Yt, bw = bw, bm = bm, centerTF = centerTF)
   } else {
     scbm_vhar_fit_lasso(
       Yt,
       bw = bw,
       bm = bm,
+      centerTF = centerTF,
       lambda_mode = lambda_mode,
       c_lambda = c_lambda,
       c_grid = c_grid,
@@ -1385,7 +1433,9 @@ scbm_vhar_empirical_fit <- function(data,
     blocks = fit_first$blocks,
     scree = scbm_block_scree(fit_first$blocks, block_names = as.character(horizon_names)),
     horizon_names = as.character(horizon_names),
-    series_names = as.character(series_names)
+    series_names = as.character(series_names),
+    centerTF = isTRUE(centerTF),
+    centered_mean = fit_first$mean
   )
   class(out) <- c("scbm_vhar_empirical", class(out))
   out
@@ -1404,7 +1454,7 @@ scbm_vhar_empirical_cluster <- function(fit,
                                     alpha_grid = scbm_default_alpha_grid(),
                                     alpha_criterion = c("holdout", "paper"),
                                     nstart = 50L,
-                                    seed = 12345) {
+                                    seed = NULL) {
 
   alpha_mode <- match.arg(alpha_mode)
   alpha_criterion <- match.arg(alpha_criterion)
