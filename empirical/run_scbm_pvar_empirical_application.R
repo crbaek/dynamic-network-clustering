@@ -1,6 +1,8 @@
 ######################################################
 ## Lead Code Developer and Maintainer: Changryong Baek
-## Set up your working directory properly.
+## PVAR empirical application
+## - prints aggregate flow tables only
+## - setup your workspace/path properly
 ######################################################
 
 rm(list = ls())
@@ -45,58 +47,6 @@ first_numeric_matrix <- function(x) {
   stop("Could not find a matrix/data.frame inside the loaded object.", call. = FALSE)
 }
 
-ensure_dir <- function(path) {
-  if (!dir.exists(path)) dir.create(path, recursive = TRUE, showWarnings = FALSE)
-  invisible(path)
-}
-
-run_plot_block <- function(save_plot, file, width, height, code) {
-  if (isTRUE(save_plot)) {
-    grDevices::pdf(file, width = width, height = height)
-    on.exit(grDevices::dev.off(), add = TRUE)
-    force(code)
-  } else if (interactive()) {
-    force(code)
-  }
-  invisible(NULL)
-}
-
-
-
-plot_scree_panels <- function(scree_df, save_plot = FALSE, file = NULL, threshold = 0.70) {
-  if (!all(c("block", "index", "prop", "cumprop") %in% names(scree_df))) {
-    stop("scree_df must contain block, index, prop, and cumprop.", call. = FALSE)
-  }
-  scree_df$block <- as.character(scree_df$block)
-  scree_df$index <- as.integer(scree_df$index)
-  scree_df$prop <- as.numeric(scree_df$prop)
-  scree_df$cumprop <- as.numeric(scree_df$cumprop)
-  blocks <- unique(scree_df$block)
-  
-  run_plot_block(
-    save_plot = save_plot,
-    file = file,
-    width = 13,
-    height = 4,
-    code = {
-      old_par <- par(no.readonly = TRUE)
-      on.exit(par(old_par), add = TRUE)
-      par(mfrow = c(1, length(blocks)), mar = c(4, 4, 2, 1))
-      for (b in blocks) {
-        df <- scree_df[scree_df$block == b, , drop = FALSE]
-        plot(df$index, df$cumprop,
-             type = "b", pch = 19, col = "blue",
-             ylim = c(0, 1),
-             xlab = "Mode index", ylab = "Cumulative proportion",
-             main = b)
-        points(df$index, df$prop, col = "red", pch = 1)
-        lines(df$index, df$prop, col = "red", lty = 2)
-        abline(h = c(0, threshold), lty = "dotted")
-      }
-    }
-  )
-}
-
 THIS_DIR <- get_script_dir()
 source(file.path(THIS_DIR, "scbm_empirical_library.R"))
 
@@ -105,8 +55,6 @@ source(file.path(THIS_DIR, "scbm_empirical_library.R"))
 # ------------------------------------------------------------
 DATA_FILE <- file.path(THIS_DIR, "data", "pvar_payroll_1990_2020.RData")
 DATA_OBJECT <- NULL
-OUTPUT_DIR <- file.path(THIS_DIR, "output")
-OUTPUT_STUB <- "scbm_pvar_empirical"
 
 # model specification
 s <- 4L
@@ -121,9 +69,9 @@ lasso_fold <- 10L
 lasso_max_iter <- 1000L
 lasso_tol <- 1e-6
 
-diagTF <- TRUE # always include the diagonal
-centerTF <- TRUE # centing the data
-updateSigma <- TRUE # adjust variace in lasso
+diagTF <- TRUE
+centerTF <- TRUE
+updateSigma <- TRUE
 sigma_diag_only <- TRUE
 
 # PisCES settings
@@ -131,27 +79,15 @@ alpha_mode <- "cv"
 alpha <- NULL
 alpha_fold <- 5L
 alpha_grid <- scbm_default_alpha_grid()
-alpha_criterion <- "holdout"
+alpha_criterion <- "paper"
 
 # clustering settings
 nstart <- 50L
 seed <- 12345L
 
-# plot / workspace options
-SAVE_WORKSPACE <- TRUE
-SAVE_PLOTS <- TRUE
-MAKE_SANKEY <- TRUE
-FIGURE_DIR <- file.path(OUTPUT_DIR, OUTPUT_STUB, "figures")
-MAKE_SCREE_PLOTS <- TRUE
-
 # ------------------------------------------------------------
 # Load and parse data
 # ------------------------------------------------------------
-ensure_dir(OUTPUT_DIR)
-APP_OUTPUT_DIR <- file.path(OUTPUT_DIR, OUTPUT_STUB)
-ensure_dir(APP_OUTPUT_DIR)
-ensure_dir(FIGURE_DIR)
-
 obj <- load_rdata_object(DATA_FILE, object_name = DATA_OBJECT)
 
 if (is.list(obj) && !is.null(obj$Y_diff)) {
@@ -173,35 +109,6 @@ SERIES_IN_ROWS <- FALSE
 # ------------------------------------------------------------
 # Step 1: first-stage fit
 # ------------------------------------------------------------
-fit_pvar_ols <- NULL
-fit_pvar_ols <- scbm_pvar_empirical_fit(
-    data = payroll_mat,
-    s = s,
-    p = p,
-    series_in_rows = SERIES_IN_ROWS,
-    series_names = series_names,
-    estimator = "ols",
-    lambda_mode = lambda_mode,
-    c_lambda = c_lambda,
-    c_grid = c_grid,
-    lasso_fold = lasso_fold,
-    lasso_max_iter = lasso_max_iter,
-    lasso_tol = lasso_tol,
-    diagTF = diagTF,
-    centerTF = centerTF,
-    updateSigma = updateSigma,
-    sigma_diag_only = sigma_diag_only
-  )
-
-if (isTRUE(MAKE_SCREE_PLOTS)) {
-  plot_scree_panels(
-    scree_df = fit_pvar_ols$scree,
-    save_plot = SAVE_PLOTS,
-    file = file.path(FIGURE_DIR, "new_rank_PVAR_ols.pdf"),
-    threshold = 0.70
-  )
-}
-
 fit_pvar <- scbm_pvar_empirical_fit(
   data = payroll_mat,
   s = s,
@@ -222,17 +129,18 @@ fit_pvar <- scbm_pvar_empirical_fit(
 )
 
 # ------------------------------------------------------------
-# Step 2: clustering and PisCES
+# Step 2: clustering and console output only
 # ------------------------------------------------------------
-# community counts: (Ky1, Kz1, Ky2, Kz2, Ky3, Kz3, Ky4, Kz4)
-n_comm <- c(2L, 2L, 2L, 3L, 3L, 3L, 3L, 2L)
 
-cluster_pvar <- scbm_pvar_empirical_cluster(
+## Main configuration: 2 -> 3 -> 3 -> 2
+n_comm_2332 <- c(2L, 3L, 3L, 3L, 3L, 2L, 2L, 2L)
+
+cluster_pvar_2332 <- scbm_pvar_empirical_cluster(
   fit_pvar,
   s = s,
   p = p,
   series_names = series_names,
-  n_comm = n_comm,
+  n_comm = n_comm_2332,
   alpha_mode = alpha_mode,
   alpha = alpha,
   alpha_fold = alpha_fold,
@@ -242,170 +150,30 @@ cluster_pvar <- scbm_pvar_empirical_cluster(
   seed = seed
 )
 
-# ------------------------------------------------------------
-# Save workspace before plots
-# ------------------------------------------------------------
-if (isTRUE(SAVE_WORKSPACE)) {
-  save.image(file = file.path(APP_OUTPUT_DIR, "workspace_before_plots.RData"))
-}
+cat("\n========================================\n")
+cat("PVAR flow table: effective path 2 -> 3 -> 3 -> 2\n")
+cat("========================================\n")
+print(cluster_pvar_2332$flow_table)
 
-# ------------------------------------------------------------
-# Optional Sankey plot
-# ------------------------------------------------------------
-if (isTRUE(MAKE_SANKEY)) {
-  need_pkgs <- c("ggplot2", "ggsankey", "dplyr", "tidyr")
-  has_pkgs <- vapply(need_pkgs, requireNamespace, logical(1L), quietly = TRUE)
+## Alternative configuration: 2 -> 2 -> 3 -> 2
+n_comm_2232 <- c(2L, 2L, 2L, 3L, 3L, 3L, 3L, 2L)
 
-  if (!all(has_pkgs)) {
-    message("Skipping PVAR Sankey plot because required packages are missing: ",
-            paste(need_pkgs[!has_pkgs], collapse = ", "))
-  } else {
-    suppressPackageStartupMessages({
-      library(ggplot2)
-      library(ggsankey)
-      library(dplyr)
-      library(tidyr)
-    })
+cluster_pvar_2232 <- scbm_pvar_empirical_cluster(
+  fit_pvar,
+  s = s,
+  p = p,
+  series_names = series_names,
+  n_comm = n_comm_2232,
+  alpha_mode = alpha_mode,
+  alpha = alpha,
+  alpha_fold = alpha_fold,
+  alpha_grid = alpha_grid,
+  alpha_criterion = alpha_criterion,
+  nstart = nstart,
+  seed = seed
+)
 
-    flow <- as.data.frame(cluster_pvar$flow_table[, c("S1.sending", "S2.sending", "S3.sending", "S4.sending"), drop = FALSE])
-    mat <- as.data.frame(flow)
-    rownames(mat) <- rownames(cluster_pvar$flow_table)
-    for (j in seq_len(ncol(mat))) mat[[j]] <- as.integer(mat[[j]])
-
-    stages <- c("S1.sending", "S2.sending", "S3.sending", "S4.sending")
-    flow_wide <- data.frame(series = rownames(mat), mat, check.names = FALSE)
-
-    s1_box_cols <- c("2" = "#E3EDF6", "1" = "#FDE8E8")
-    s2_box_cols <- c("2" = "#C6DBEF", "1" = "#FBCFCE")
-    s3_box_cols <- c("1" = "#9ECAE1", "2" = "#F8AFA8", "3" = "#CCEBC5")
-    s4_box_cols <- c("3" = "#CE93D8", "2" = "#D9CE9B", "1" = "#74C476") 
-    
-
-    flow_cols <- c(
-      "Stg1_1" = unname(s1_box_cols["1"]), "Stg1_2" = unname(s1_box_cols["2"]),
-      "Stg2_1" = unname(s2_box_cols["1"]), "Stg2_2" = unname(s2_box_cols["2"]),
-      "Stg3_1" = unname(s3_box_cols["1"]), "Stg3_2" = unname(s3_box_cols["2"]), "Stg3_3" = unname(s3_box_cols["3"]),
-      "Stg4_1" = unname(s4_box_cols["1"]), "Stg4_2" = unname(s4_box_cols["2"]), "Stg4_3" = unname(s4_box_cols["3"])
-    )
-
-    data_flow <- flow_wide %>%
-      make_long(S1.sending, S2.sending, S3.sending, S4.sending) %>%
-      mutate(
-        x_str = as.character(x),
-        node_str = as.character(node),
-        flow_group = case_when(
-          x_str == stages[1L] ~ paste0("Stg1_", node_str),
-          x_str == stages[2L] ~ paste0("Stg2_", node_str),
-          x_str == stages[3L] ~ paste0("Stg3_", node_str),
-          x_str == stages[4L] ~ paste0("Stg4_", node_str),
-          TRUE ~ NA_character_
-        )
-      ) %>%
-      mutate(
-        x = factor(x, levels = stages),
-        next_x = factor(next_x, levels = stages),
-        node = factor(node, levels = as.character(1:3)),
-        next_node = factor(next_node, levels = as.character(1:3))
-      ) %>%
-      filter(!is.na(node))
-
-    make_stage_layout <- function(v, x_pos, box_col_map, group_levels = 1:3,
-                                  gap = 2.7, inner_pad = 0.55, box_halfwidth = 0.25) {
-      cnt <- table(factor(v, levels = group_levels))
-      present <- as.integer(names(cnt)[cnt > 0L])
-      total_height <- sum(cnt[cnt > 0L]) + gap * (length(present) - 1L)
-      cur <- - total_height / 2
-      y_ranges <- setNames(vector("list", length(group_levels)), as.character(group_levels))
-      box_df <- data.frame()
-      for (g in present) {
-        n_g <- as.integer(cnt[as.character(g)])
-        ymin <- cur
-        ymax <- cur + n_g
-        y_ranges[[as.character(g)]] <- c(ymin + inner_pad, ymax - inner_pad)
-        box_df <- bind_rows(box_df, data.frame(
-          x = x_pos, xmin = x_pos - box_halfwidth, xmax = x_pos + box_halfwidth,
-          ymin = ymin, ymax = ymax, fill = unname(box_col_map[as.character(g)]),
-          stringsAsFactors = FALSE
-        ))
-        cur <- ymax + gap
-      }
-      list(y_ranges = y_ranges, box_df = box_df)
-    }
-
-    make_labels <- function(x_pos, col_idx, y_ranges, mat, txt_size = 3.2) {
-      out <- list()
-      for (g in names(y_ranges)) {
-        rng <- y_ranges[[g]]
-        if (is.null(rng)) next
-        idx <- which(as.integer(mat[, col_idx]) == as.integer(g))
-        if (!length(idx)) next
-        nms <- sort(as.character(rownames(mat)[idx]))
-        ys <- if (length(nms) == 1L) mean(rng) else seq(from = rng[2L], to = rng[1L], length.out = length(nms))
-        out <- c(out, list(
-          annotate("text", x = x_pos, y = ys, label = nms,
-                   colour = "black", size = txt_size, fontface = 2, hjust = 0.5)
-        ))
-      }
-      out
-    }
-
-    lay_s1 <- make_stage_layout(mat[, 1L], x_pos = 1, box_col_map = s1_box_cols)
-    lay_s2 <- make_stage_layout(mat[, 2L], x_pos = 2, box_col_map = s2_box_cols)
-    lay_s3 <- make_stage_layout(mat[, 3L], x_pos = 3, box_col_map = s3_box_cols)
-    lay_s4 <- make_stage_layout(mat[, 4L], x_pos = 4, box_col_map = s4_box_cols)
-    box_df <- bind_rows(lay_s1$box_df, lay_s2$box_df, lay_s3$box_df, lay_s4$box_df)
-
-    pvar_sankey_plot <- ggplot(data_flow, aes(x = x, next_x = next_x, node = node, next_node = next_node, fill = flow_group)) +
-      geom_rect(data = box_df, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
-                inherit.aes = FALSE, fill = box_df$fill, color = NA) +
-      geom_sankey(flow.alpha = 0.5, node.color = NA, width = 0.001, show.legend = FALSE) +
-      geom_rect(data = box_df, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
-                inherit.aes = FALSE, fill = NA, color = "grey40", linewidth = 0.4) +
-      scale_fill_manual(values = flow_cols, guide = "none", na.value = "transparent") +
-      scale_x_discrete(labels = c("S1.sending" = "Q1", "S2.sending" = "Q2", "S3.sending" = "Q3", "S4.sending" = "Q4")) +
-      theme_sankey(base_size = 14) +
-      labs(x = NULL, y = NULL) +
-      theme(
-        legend.position = "none",
-        axis.text.x = element_text(size = 12, face = "bold"),
-        axis.title.y = element_blank(),
-        axis.text.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        plot.margin = margin(10, 40, 10, 40)
-      ) +
-      make_labels(x_pos = 1, col_idx = 1, y_ranges = lay_s1$y_ranges, mat = mat) +
-      make_labels(x_pos = 2, col_idx = 2, y_ranges = lay_s2$y_ranges, mat = mat) +
-      make_labels(x_pos = 3, col_idx = 3, y_ranges = lay_s3$y_ranges, mat = mat) +
-      make_labels(x_pos = 4, col_idx = 4, y_ranges = lay_s4$y_ranges, mat = mat)
-    print(pvar_sankey_plot)
-    run_plot_block(
-      save_plot = SAVE_PLOTS,
-      file = file.path(FIGURE_DIR, "pvar_sankey.pdf"),
-      width = 12,
-      height = 7,
-      code = {
-        print(pvar_sankey_plot)
-      }
-    )
-  }
-}
-
-# ------------------------------------------------------------
-# Console summary
-# ------------------------------------------------------------
-cat("\n==============================\n")
-cat("ScBM-PVAR empirical analysis done\n")
-cat("Estimator      : ", fit_pvar$estimator, "\n", sep = "")
-cat("q              : ", fit_pvar$q, "\n", sep = "")
-cat("T              : ", fit_pvar$TT, "\n", sep = "")
-cat("s              : ", fit_pvar$s, "\n", sep = "")
-cat("p              : ", fit_pvar$p, "\n", sep = "")
-cat("alpha selected : ", round(cluster_pvar$alpha_sel, 6), "\n", sep = "")
-if (!is.null(fit_pvar$first_stage$c_lambda_sel)) {
-  cat("c_lambda       : ", round(fit_pvar$first_stage$c_lambda_sel, 6), "\n", sep = "")
-}
-cat("==============================\n\n")
-
-cat("Community flow table:\n")
-print(cluster_pvar$flow_table)
-
+cat("\n========================================\n")
+cat("PVAR flow table: effective path 2 -> 2 -> 3 -> 2\n")
+cat("========================================\n")
+print(cluster_pvar_2232$flow_table)
