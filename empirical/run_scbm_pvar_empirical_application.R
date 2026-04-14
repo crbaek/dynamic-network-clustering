@@ -61,6 +61,42 @@ run_plot_block <- function(save_plot, file, width, height, code) {
   invisible(NULL)
 }
 
+
+
+plot_scree_panels <- function(scree_df, save_plot = FALSE, file = NULL, threshold = 0.70) {
+  if (!all(c("block", "index", "prop", "cumprop") %in% names(scree_df))) {
+    stop("scree_df must contain block, index, prop, and cumprop.", call. = FALSE)
+  }
+  scree_df$block <- as.character(scree_df$block)
+  scree_df$index <- as.integer(scree_df$index)
+  scree_df$prop <- as.numeric(scree_df$prop)
+  scree_df$cumprop <- as.numeric(scree_df$cumprop)
+  blocks <- unique(scree_df$block)
+  
+  run_plot_block(
+    save_plot = save_plot,
+    file = file,
+    width = 13,
+    height = 4,
+    code = {
+      old_par <- par(no.readonly = TRUE)
+      on.exit(par(old_par), add = TRUE)
+      par(mfrow = c(1, length(blocks)), mar = c(4, 4, 2, 1))
+      for (b in blocks) {
+        df <- scree_df[scree_df$block == b, , drop = FALSE]
+        plot(df$index, df$cumprop,
+             type = "b", pch = 19, col = "blue",
+             ylim = c(0, 1),
+             xlab = "Mode index", ylab = "Cumulative proportion",
+             main = b)
+        points(df$index, df$prop, col = "red", pch = 1)
+        lines(df$index, df$prop, col = "red", lty = 2)
+        abline(h = c(0, threshold), lty = "dotted")
+      }
+    }
+  )
+}
+
 THIS_DIR <- get_script_dir()
 source(file.path(THIS_DIR, "scbm_empirical_library.R"))
 
@@ -90,9 +126,6 @@ centerTF <- TRUE # centing the data
 updateSigma <- TRUE # adjust variace in lasso
 sigma_diag_only <- TRUE
 
-# community counts: (Ky1, Kz1, Ky2, Kz2, Ky3, Kz3, Ky4, Kz4)
-n_comm <- c(2L, 2L, 2L, 3L, 3L, 3L, 3L, 2L)
-
 # PisCES settings
 alpha_mode <- "cv"
 alpha <- NULL
@@ -109,7 +142,7 @@ SAVE_WORKSPACE <- TRUE
 SAVE_PLOTS <- TRUE
 MAKE_SANKEY <- TRUE
 FIGURE_DIR <- file.path(OUTPUT_DIR, OUTPUT_STUB, "figures")
-# SAVE_PLOTS <- TRUE
+MAKE_SCREE_PLOTS <- TRUE
 
 # ------------------------------------------------------------
 # Load and parse data
@@ -140,6 +173,35 @@ SERIES_IN_ROWS <- FALSE
 # ------------------------------------------------------------
 # Step 1: first-stage fit
 # ------------------------------------------------------------
+fit_pvar_ols <- NULL
+fit_pvar_ols <- scbm_pvar_empirical_fit(
+    data = payroll_mat,
+    s = s,
+    p = p,
+    series_in_rows = SERIES_IN_ROWS,
+    series_names = series_names,
+    estimator = "ols",
+    lambda_mode = lambda_mode,
+    c_lambda = c_lambda,
+    c_grid = c_grid,
+    lasso_fold = lasso_fold,
+    lasso_max_iter = lasso_max_iter,
+    lasso_tol = lasso_tol,
+    diagTF = diagTF,
+    centerTF = centerTF,
+    updateSigma = updateSigma,
+    sigma_diag_only = sigma_diag_only
+  )
+
+if (isTRUE(MAKE_SCREE_PLOTS)) {
+  plot_scree_panels(
+    scree_df = fit_pvar_ols$scree,
+    save_plot = SAVE_PLOTS,
+    file = file.path(FIGURE_DIR, "new_rank_PVAR_ols.pdf"),
+    threshold = 0.70
+  )
+}
+
 fit_pvar <- scbm_pvar_empirical_fit(
   data = payroll_mat,
   s = s,
@@ -162,6 +224,9 @@ fit_pvar <- scbm_pvar_empirical_fit(
 # ------------------------------------------------------------
 # Step 2: clustering and PisCES
 # ------------------------------------------------------------
+# community counts: (Ky1, Kz1, Ky2, Kz2, Ky3, Kz3, Ky4, Kz4)
+n_comm <- c(2L, 2L, 2L, 3L, 3L, 3L, 3L, 2L)
+
 cluster_pvar <- scbm_pvar_empirical_cluster(
   fit_pvar,
   s = s,
