@@ -1,4 +1,4 @@
-Official implementation of the paper "Dynamic spectral co-clustering of directed networks to unveil latent community paths in VAR-type models" by Younghoon Kim and Changryong Baek.
+Official implementation of the paper "Dynamic spectral co-clustering of directed networks to unveil latent community paths in VAR-type models".
 This repository provides a statistical framework to detect and track group structures within complex, directed networks over time.
 
 Key Features:
