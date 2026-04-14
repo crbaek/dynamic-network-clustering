@@ -1,54 +1,46 @@
-# Empirical folder
+# Empirical folder: console-only runners
 
-This folder contains the two empirical applications from the manuscript in a GitHub-ready form.
+This note describes the console-only versions of the empirical runners.
 
 ## Files
 
-- `scbm_empirical_library.R`
-  - shared empirical-analysis library
-  - supports PVAR and VHAR fitting, clustering, and PisCES smoothing
+* `run\_scbm\_pvar\_empirical\_application.R`
 
-- `run_scbm_pvar_empirical_application.R`
-  - U.S. payroll PVAR application
-  - expects the bundled `data/pvar_payroll_1990_2020.RData`
-  - uses the processed quarterly log-difference series from the `.RData` object
-  - keeps fit and clustering objects in memory
-  - saves one workspace `.RData` before plotting
-  - figure saving is optional through `SAVE_PLOTS`
+  * U.S. payroll PVAR application
+  * no workspace save
+  * no plot creation
+  * no file export
+  * prints the flow tables for both effective paths `2 -> 3 -> 3 -> 2` and `2 -> 2 -> 3 -> 2`
+* `run\_scbm\_vhar\_empirical\_application.R`
 
-- `run_scbm_vhar_empirical_application.R`
-  - global realized-volatility VHAR application
-  - expects the bundled `data/rk_mat2000-2022.Rdata`
-  - applies the same date filtering, log transform, interpolation, and index removal used in the working code
-  - keeps fit and clustering objects in memory
-  - saves one workspace `.RData` before plotting
-  - figure saving is optional through `SAVE_PLOTS`
+  * global realized-volatility VHAR application
+  * no workspace save
+  * no plot creation
+  * no file export
+  * prints the aggregate flow tables for both `3-3-3` and `3-4-3` configurations
+* `scbm\_empirical\_library.R`
 
-- `data/`
-  - empirical inputs
+  * shared empirical-analysis library used by both scripts
 
-- `output/`
-  - default location for the saved workspace `.RData`
-  - figure files are written only when `SAVE_PLOTS <- TRUE`
+## Default settings
 
-## Default empirical settings
+### PVAR console runner
 
-### PVAR application
+* estimator: lasso
+* seasonal structure: `s = 4`, `p = 1`
+* lambda selection: `cv\_c` with `c\_lambda = 0.20`
+* centering: seasonal mean centering within each quarter
+* PisCES alpha: selected by CV
+* printed outputs: flow tables for `2332` and `2232`
 
-- estimator: lasso
-- seasonal structure: `s = 4`, `p = 1`
-- lambda selection: `cv_c` with `c_lambda = 0.20`
-- clustering path counts: `c(2, 2, 2, 3, 3, 3, 3, 2)`
-- PisCES alpha: selected by CV
-- no fit/cluster csv export
+### VHAR console runner
 
-### VHAR application
-
-- estimator: lasso
-- horizon lengths: `bw = 5`, `bm = 22`
-- lambda selection: `cv_c` with `c_lambda = 0.25`
-- aggregated community counts: `c(3, 3, 3)` in the order short / middle / long
-- PisCES alpha: selected by CV
-- no fit/cluster csv export
+* estimator: lasso
+* horizon lengths: `bw = 5`, `bm = 22`
+* lambda selection: `cv\_c` with `c\_lambda = 0.25`
+* centering: global series-wise demeaning after log transform and interpolation
+* PisCES alpha: selected by CV
+* printed outputs: aggregate flow tables for `333` and `343`
 
 Edit the user configuration block at the top of each script if you want to change these defaults.
+
