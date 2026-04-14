@@ -1,4 +1,4 @@
-Official implementation of the paper "Dynamic spectral co-clustering of directed networks to unveil latent community paths in VAR-type models".
+Official implementation of the paper "Latent community paths in VAR-type models via dynamic directed spectral co-clustering".
 This repository provides a statistical framework to detect and track group structures within complex, directed networks over time.
 
 Key Features:
